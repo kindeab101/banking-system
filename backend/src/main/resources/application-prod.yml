@@ -1,0 +1,10 @@
+app:
+  demo:
+    seed: false
+springdoc:
+  swagger-ui:
+    enabled: false
+logging:
+  level:
+    root: WARN
+    com.securebank.bms: INFO

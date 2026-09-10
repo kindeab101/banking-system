@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:banking;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+app:
+  jwt:
+    secret: test-jwt-secret-key-must-be-at-least-32-chars
+  demo:
+    seed: true

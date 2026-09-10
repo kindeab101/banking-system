@@ -1,0 +1,44 @@
+# DEMO / TEST stack — simulated banking data only.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-banking}
+      POSTGRES_USER: ${POSTGRES_USER:-banking}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-demo-db-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - banking_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-banking} -d ${POSTGRES_DB:-banking}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-banking}
+      DB_USERNAME: ${POSTGRES_USER:-banking}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-change-me-demo-db-password}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-demo-jwt-secret-32+}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8088}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "8088:80"
+    depends_on:
+      - backend
+
+volumes:
+  banking_pgdata:
