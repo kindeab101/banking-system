@@ -13,6 +13,7 @@ public record CustomerResponse(
         String addressLine,
         String city,
         String status,
-        Instant createdAt
+        Instant createdAt,
+        String primaryAccountNumber
 ) {
 }

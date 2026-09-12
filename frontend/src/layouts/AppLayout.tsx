@@ -27,7 +27,7 @@ export function AppLayout() {
               <NavLink to="/app/notifications">Notifications</NavLink>
             </>
           )}
-          {hasRole('BANK_EMPLOYEE') && (
+          {(hasRole('BANK_EMPLOYEE') || hasRole('ADMINISTRATOR')) && (
             <>
               <NavLink to="/staff/dashboard">Operations</NavLink>
               <NavLink to="/staff/customers">Customers</NavLink>

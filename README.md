@@ -133,7 +133,7 @@ Business-rule failures use **422 Unprocessable Entity**. Duplicate/idempotency u
 | `employee`   | `DemoStaff#2026`    | BANK_EMPLOYEE           |
 | `customer.a` | `DemoCustomer#2026` | CUSTOMER (Abebe Kebede) |
 | `customer.b` | `DemoCustomer#2026` | CUSTOMER (Sara Tesfaye) |
-
+| `Kindeab` | `Kindeab123` | CUSTOMER (Kinde Abdurahman) |
 
 Fictional accounts include `1000000001` (Abebe savings) and `1000000003` (Sara savings). Try transferring **5000 ETB** from `1000000001` to `1000000003`.
 

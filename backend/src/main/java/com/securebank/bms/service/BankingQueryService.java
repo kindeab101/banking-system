@@ -228,25 +228,26 @@ public class BankingQueryService {
         }
         Role customerRole = roles.findByCode(RoleCode.CUSTOMER.name()).orElseThrow();
         UserAccount user = new UserAccount();
-        user.setUsername(request.username());
-        user.setEmail(request.email());
-        user.setFullName(request.firstName() + " " + request.lastName());
+        user.setUsername(request.username().trim());
+        user.setEmail(request.email().trim());
+        user.setFullName(request.firstName().trim() + " " + request.lastName().trim());
         user.setPasswordHash(passwordEncoder.encode(request.temporaryPassword()));
         user.setStatus(UserStatus.ACTIVE);
         user.getRoles().add(customerRole);
-        users.save(user);
+        users.saveAndFlush(user);
         Customer customer = new Customer();
         customer.setUser(user);
         customer.setCustomerNumber(nextCustomerNumber());
-        customer.setFirstName(request.firstName());
-        customer.setLastName(request.lastName());
+        customer.setFirstName(request.firstName().trim());
+        customer.setLastName(request.lastName().trim());
         customer.setPhone(request.phone());
         customer.setAddressLine(request.addressLine());
         customer.setCity(request.city());
         customer.setStatus(CustomerStatus.ACTIVE);
-        customers.save(customer);
-        auditService.record(actor, "CUSTOMER_CREATION", "CUSTOMER", customer.getCustomerNumber(), AuditResult.SUCCESS, null);
-        return Mappers.toCustomer(customer);
+        customers.saveAndFlush(customer);
+        Account account = openDefaultSavingsAccount(actor, customer);
+        auditService.record(actor, "CUSTOMER_CREATION", "CUSTOMER", customer.getCustomerNumber(), AuditResult.SUCCESS, account.getAccountNumber());
+        return Mappers.toCustomer(customer, account.getAccountNumber());
     }
 
     @Transactional
@@ -364,18 +365,30 @@ public class BankingQueryService {
             throw new com.securebank.bms.exception.ApiException(org.springframework.http.HttpStatus.CONFLICT, "Conflict", "Username or email already exists");
         }
         if (RoleCode.CUSTOMER.name().equals(request.roleCode())) {
-            throw new com.securebank.bms.exception.InvalidTransactionException("Create customers through the customer API");
+            String[] names = splitFullName(request.fullName());
+            createCustomer(actor, new CreateCustomerRequest(
+                    names[0],
+                    names[1],
+                    request.email(),
+                    request.username(),
+                    request.temporaryPassword(),
+                    null,
+                    null,
+                    null
+            ));
+            UserAccount created = users.findByUsernameIgnoreCase(request.username().trim()).orElseThrow();
+            return Mappers.toUser(created);
         }
         Role role = roles.findByCode(request.roleCode())
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found"));
         UserAccount user = new UserAccount();
-        user.setUsername(request.username());
-        user.setEmail(request.email());
-        user.setFullName(request.fullName());
+        user.setUsername(request.username().trim());
+        user.setEmail(request.email().trim());
+        user.setFullName(request.fullName().trim());
         user.setPasswordHash(passwordEncoder.encode(request.temporaryPassword()));
         user.setStatus(UserStatus.ACTIVE);
         user.getRoles().add(role);
-        users.save(user);
+        users.saveAndFlush(user);
         auditService.record(actor, "USER_CREATION", "USER", user.getUsername(), AuditResult.SUCCESS, request.roleCode());
         return Mappers.toUser(user);
     }
@@ -395,7 +408,18 @@ public class BankingQueryService {
         Role role = roles.findByCode(roleCode).orElseThrow(() -> new ResourceNotFoundException("Role not found"));
         user.getRoles().clear();
         user.getRoles().add(role);
-        users.save(user);
+        users.saveAndFlush(user);
+        if (RoleCode.CUSTOMER.name().equals(roleCode) && customers.findByUserId(user.getId()).isEmpty()) {
+            String[] names = splitFullName(user.getFullName());
+            Customer customer = new Customer();
+            customer.setUser(user);
+            customer.setCustomerNumber(nextCustomerNumber());
+            customer.setFirstName(names[0]);
+            customer.setLastName(names[1]);
+            customer.setStatus(CustomerStatus.ACTIVE);
+            customers.saveAndFlush(customer);
+            openDefaultSavingsAccount(actor, customer);
+        }
         auditService.record(actor, "PERMISSION_CHANGE", "USER", user.getUsername(), AuditResult.SUCCESS, roleCode);
         return Mappers.toUser(user);
     }
@@ -417,6 +441,30 @@ public class BankingQueryService {
         settings.save(setting);
         auditService.record(actor, "SETTINGS_CHANGE", "SETTING", key, AuditResult.SUCCESS, null);
         return new SettingResponse(setting.getKey(), setting.getValue(), setting.getDescription());
+    }
+
+    private Account openDefaultSavingsAccount(UserAccount actor, Customer customer) {
+        Account account = new Account();
+        account.setAccountNumber(nextAccountNumber());
+        account.setCustomer(customer);
+        account.setAccountType(AccountType.SAVINGS);
+        account.setCurrency("ETB");
+        account.setBalance(BigDecimal.ZERO.setScale(2, java.math.RoundingMode.HALF_UP));
+        account.setStatus(AccountStatus.ACTIVE);
+        accounts.saveAndFlush(account);
+        auditService.record(actor, "ACCOUNT_CREATION", "ACCOUNT", account.getAccountNumber(), AuditResult.SUCCESS, "opened with customer");
+        return account;
+    }
+
+    private static String[] splitFullName(String fullName) {
+        String trimmed = fullName == null ? "" : fullName.trim();
+        if (trimmed.isBlank()) {
+            return new String[]{"Customer", "User"};
+        }
+        String[] parts = trimmed.split("\\s+", 2);
+        String first = parts[0];
+        String last = parts.length > 1 ? parts[1] : parts[0];
+        return new String[]{first, last};
     }
 
     private String nextCustomerNumber() {

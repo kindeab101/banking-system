@@ -61,6 +61,32 @@ class SecurityApiTest {
         mockMvc.perform(get("/api/accounts")).andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void adminCreatedCustomerCanLoginAndSeeAccount() throws Exception {
+        String adminToken = token("admin", "DemoAdmin#2026");
+        mockMvc.perform(post("/api/admin/users")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "username", "customer.lina",
+                                "email", "lina.hailu@securebank.demo",
+                                "fullName", "Lina Hailu",
+                                "temporaryPassword", "DemoTemp#2026x",
+                                "roleCode", "CUSTOMER"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("customer.lina"))
+                .andExpect(jsonPath("$.roles[0]").value("CUSTOMER"));
+
+        String customerToken = token("customer.lina", "DemoTemp#2026x");
+        mockMvc.perform(get("/api/accounts").header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].accountNumber").isNotEmpty())
+                .andExpect(jsonPath("$[0].accountType").value("SAVINGS"));
+        mockMvc.perform(get("/api/dashboard").header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Lina Hailu"));
+    }
+
     private String token(String user, String password) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

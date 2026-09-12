@@ -26,6 +26,8 @@ function Metric({ label, value }: { label: string, value: number }) {
 export function CustomerManagePage() {
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<any[]>([])
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', username: '', temporaryPassword: 'DemoTemp#2026x' })
   async function search(e?: FormEvent) {
     e?.preventDefault()
@@ -35,8 +37,16 @@ export function CustomerManagePage() {
   useEffect(() => { search() }, [])
   async function create(e: FormEvent) {
     e.preventDefault()
-    await api.post('/api/staff/customers', form)
-    search()
+    setError('')
+    setMessage('')
+    try {
+      const { data } = await api.post('/api/staff/customers', form)
+      setMessage(`Customer ${data.username} can sign in now. Account ${data.primaryAccountNumber} is ready.`)
+      setForm({ firstName: '', lastName: '', email: '', username: '', temporaryPassword: 'DemoTemp#2026x' })
+      search()
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not create customer')
+    }
   }
   return (
     <>
@@ -64,7 +74,11 @@ export function CustomerManagePage() {
         <label>Last name</label><input required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
         <label>Email</label><input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         <label>Username</label><input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-        <label>Temporary password</label><input required value={form.temporaryPassword} onChange={(e) => setForm({ ...form, temporaryPassword: e.target.value })} />
+        <label>Password</label>
+        <input required minLength={10} value={form.temporaryPassword} onChange={(e) => setForm({ ...form, temporaryPassword: e.target.value })} />
+        <p className="muted">At least 10 characters. The customer signs in with this username and password immediately. A savings account is opened at the same time.</p>
+        {error && <p className="error" role="alert">{error}</p>}
+        {message && <p className="ok">{message}</p>}
         <button className="btn btn-primary">Create customer</button>
       </form>
     </>

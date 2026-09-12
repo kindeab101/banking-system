@@ -41,6 +41,10 @@ public final class Mappers {
     }
 
     public static CustomerResponse toCustomer(Customer c) {
+        return toCustomer(c, null);
+    }
+
+    public static CustomerResponse toCustomer(Customer c, String primaryAccountNumber) {
         return new CustomerResponse(
                 c.getId(),
                 c.getCustomerNumber(),
@@ -52,7 +56,8 @@ public final class Mappers {
                 c.getAddressLine(),
                 c.getCity(),
                 c.getStatus().name(),
-                c.getCreatedAt()
+                c.getCreatedAt(),
+                primaryAccountNumber
         );
     }
 

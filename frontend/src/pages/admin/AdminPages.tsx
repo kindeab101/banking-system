@@ -31,7 +31,9 @@ export function AdminDashboard() {
 
 export function UsersPage() {
   const [rows, setRows] = useState<any[]>([])
-  const [form, setForm] = useState({ username: '', email: '', fullName: '', temporaryPassword: 'DemoStaff#2026x', roleCode: 'BANK_EMPLOYEE' })
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({ username: '', email: '', fullName: '', temporaryPassword: 'DemoTemp#2026x', roleCode: 'CUSTOMER' })
   async function load() {
     const { data } = await api.get('/api/admin/users')
     setRows(data.content)
@@ -39,8 +41,19 @@ export function UsersPage() {
   useEffect(() => { load() }, [])
   async function create(e: FormEvent) {
     e.preventDefault()
-    await api.post('/api/admin/users', form)
-    load()
+    setError('')
+    setMessage('')
+    try {
+      const { data } = await api.post('/api/admin/users', form)
+      const roleNote = form.roleCode === 'CUSTOMER'
+        ? ' They can sign in now with this username and password. A savings account was opened for them.'
+        : ' They can sign in now with this username and password.'
+      setMessage(`Created ${data.username}.${roleNote}`)
+      setForm({ ...form, username: '', email: '', fullName: '' })
+      load()
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not create user')
+    }
   }
   return (
     <>
@@ -63,15 +76,22 @@ export function UsersPage() {
         </table>
       </div>
       <form className="card" style={{ marginTop: '1rem', maxWidth: 560 }} onSubmit={create}>
-        <h3>Create staff user</h3>
+        <h3>Create user</h3>
+        <p className="muted">Customers receive a login and a savings account immediately. Give them the username and password you enter here.</p>
         <label>Username</label><input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
         <label>Email</label><input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         <label>Full name</label><input required value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
+        <label>Password</label>
+        <input required minLength={10} value={form.temporaryPassword} onChange={(e) => setForm({ ...form, temporaryPassword: e.target.value })} />
+        <p className="muted">At least 10 characters. This is the password they use to sign in.</p>
         <label>Role</label>
         <select value={form.roleCode} onChange={(e) => setForm({ ...form, roleCode: e.target.value })}>
-          <option>BANK_EMPLOYEE</option>
-          <option>ADMINISTRATOR</option>
+          <option value="CUSTOMER">CUSTOMER</option>
+          <option value="BANK_EMPLOYEE">BANK_EMPLOYEE</option>
+          <option value="ADMINISTRATOR">ADMINISTRATOR</option>
         </select>
+        {error && <p className="error" role="alert">{error}</p>}
+        {message && <p className="ok">{message}</p>}
         <button className="btn btn-primary">Create user</button>
       </form>
     </>
