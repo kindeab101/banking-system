@@ -40,3 +40,7 @@ backend/.project
 backend/.settings/
 coverage/
 backend/backend-error.txt
+
+# Antigravity / Cursor.cursor/
+
+/.cursor/

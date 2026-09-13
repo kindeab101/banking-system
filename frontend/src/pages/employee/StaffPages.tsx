@@ -48,9 +48,29 @@ export function CustomerManagePage() {
       setError(err?.response?.data?.message || 'Could not create customer')
     }
   }
+
+  async function resetPassword(c: any) {
+    setError('')
+    setMessage('')
+    const newPassword = prompt(`Enter new password for ${c.firstName} ${c.lastName} (${c.username}) (min 10 characters):`, 'DemoNewPass#2026x')
+    if (!newPassword) return
+    if (newPassword.length < 10) {
+      setError('Password must be at least 10 characters')
+      return
+    }
+    try {
+      await api.post(`/api/staff/customers/${c.id}/reset-password`, { newPassword })
+      setMessage(`Password for ${c.username} was reset to: ${newPassword}`)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not reset customer password')
+    }
+  }
+
   return (
     <>
       <h1>Customer management</h1>
+      {error && <p className="error" role="alert">{error}</p>}
+      {message && <p className="ok">{message}</p>}
       <form className="card row" onSubmit={search}>
         <div style={{ flex: 1 }}>
           <label htmlFor="q">Search</label>
@@ -60,10 +80,20 @@ export function CustomerManagePage() {
       </form>
       <div className="card" style={{ marginTop: '1rem' }}>
         <table className="table">
-          <thead><tr><th>Number</th><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+          <thead><tr><th>Number</th><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
             {rows.map((c) => (
-              <tr key={c.id}><td><Link to={`/staff/customers/${c.id}`}>{c.customerNumber}</Link></td><td>{c.firstName} {c.lastName}</td><td>{c.email}</td><td>{c.status}</td></tr>
+              <tr key={c.id}>
+                <td><Link to={`/staff/customers/${c.id}`}>{c.customerNumber}</Link></td>
+                <td>{c.firstName} {c.lastName}</td>
+                <td>{c.email}</td>
+                <td>{c.status}</td>
+                <td>
+                  <button className="btn btn-ghost" onClick={() => resetPassword(c)}>
+                    Reset Password
+                  </button>
+                </td>
+              </tr>
             ))}
           </tbody>
         </table>
@@ -90,28 +120,80 @@ export function CustomerDetailPage() {
   const [c, setC] = useState<any>(null)
   const [accounts, setAccounts] = useState<any[]>([])
   const [status, setStatus] = useState('ACTIVE')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
   useEffect(() => {
     api.get(`/api/staff/customers/${id}`).then((r) => { setC(r.data); setStatus(r.data.status) })
     api.get(`/api/staff/customers/${id}/accounts`).then((r) => setAccounts(r.data))
   }, [id])
+
+  async function resetPassword() {
+    setError('')
+    setMessage('')
+    const newPassword = prompt(`Enter new password for ${c.firstName} ${c.lastName} (${c.username}) (min 10 characters):`, 'DemoNewPass#2026x')
+    if (!newPassword) return
+    if (newPassword.length < 10) {
+      setError('Password must be at least 10 characters')
+      return
+    }
+    try {
+      await api.post(`/api/staff/customers/${id}/reset-password`, { newPassword })
+      setMessage(`Password for ${c.username} was reset to: ${newPassword}`)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not reset password')
+    }
+  }
+
+  async function deleteAccount(accountNumber: string) {
+    setError('')
+    setMessage('')
+    if (!confirm(`Are you sure you want to permanently delete account ${accountNumber}? Balance must be 0 ETB.`)) return
+    try {
+      await api.delete(`/api/staff/accounts/${accountNumber}`)
+      setMessage(`Account ${accountNumber} deleted successfully.`)
+      const { data } = await api.get(`/api/staff/customers/${id}/accounts`)
+      setAccounts(data)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not delete account')
+    }
+  }
+
   if (!c) return <p>Loading…</p>
   return (
     <>
       <h1>{c.firstName} {c.lastName}</h1>
+      {error && <p className="error" role="alert">{error}</p>}
+      {message && <p className="ok">{message}</p>}
       <div className="card">
         <p>{c.customerNumber} · {c.email} · {c.status}</p>
-        <div className="row">
+        <div className="row" style={{ flexWrap: 'wrap', gap: '0.6rem' }}>
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option>ACTIVE</option><option>INACTIVE</option>
           </select>
           <button className="btn btn-primary" style={{ width: 'auto' }} onClick={() => api.patch(`/api/staff/customers/${id}`, { status }).then(() => location.reload())}>Update status</button>
+          <button className="btn btn-ghost" style={{ width: 'auto' }} onClick={resetPassword}>Reset Credentials</button>
         </div>
       </div>
       <div className="card" style={{ marginTop: '1rem' }}>
         <h3>Accounts</h3>
         <table className="table">
-          <thead><tr><th>Number</th><th>Type</th><th>Balance</th><th>Status</th></tr></thead>
-          <tbody>{accounts.map((a) => <tr key={a.accountNumber}><td>{a.accountNumber}</td><td>{a.accountType}</td><td>{a.balance}</td><td>{a.status}</td></tr>)}</tbody>
+          <thead><tr><th>Number</th><th>Type</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            {accounts.map((a) => (
+              <tr key={a.accountNumber}>
+                <td>{a.accountNumber}</td>
+                <td>{a.accountType}</td>
+                <td>{a.balance}</td>
+                <td>{a.status}</td>
+                <td>
+                  <button className="btn btn-ghost" style={{ color: '#dc2626' }} onClick={() => deleteAccount(a.accountNumber)}>
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
     </>
@@ -121,22 +203,58 @@ export function CustomerDetailPage() {
 export function StaffAccountsPage() {
   const [rows, setRows] = useState<any[]>([])
   const [form, setForm] = useState({ customerNumber: 'CUS-000001', accountType: 'SAVINGS', openingBalance: '0' })
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
   useEffect(() => { api.get('/api/staff/accounts').then((r) => setRows(r.data.content)) }, [])
+
   async function create(e: FormEvent) {
     e.preventDefault()
-    await api.post('/api/staff/accounts', { ...form, openingBalance: Number(form.openingBalance) })
-    const { data } = await api.get('/api/staff/accounts')
-    setRows(data.content)
+    setError('')
+    setMessage('')
+    try {
+      await api.post('/api/staff/accounts', { ...form, openingBalance: Number(form.openingBalance) })
+      setMessage('Account opened successfully.')
+      const { data } = await api.get('/api/staff/accounts')
+      setRows(data.content)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not open account')
+    }
   }
+
   async function changeStatus(accountNumber: string, status: string) {
     if (!confirm(`Set ${accountNumber} to ${status}?`)) return
-    await api.patch(`/api/staff/accounts/${accountNumber}/status`, { status })
-    const { data } = await api.get('/api/staff/accounts')
-    setRows(data.content)
+    setError('')
+    setMessage('')
+    try {
+      await api.patch(`/api/staff/accounts/${accountNumber}/status`, { status })
+      setMessage(`Account ${accountNumber} status changed to ${status}.`)
+      const { data } = await api.get('/api/staff/accounts')
+      setRows(data.content)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not update status')
+    }
   }
+
+  async function deleteAccount(accountNumber: string) {
+    if (!confirm(`Are you sure you want to permanently delete account ${accountNumber}? Balance must be 0 ETB.`)) return
+    setError('')
+    setMessage('')
+    try {
+      await api.delete(`/api/staff/accounts/${accountNumber}`)
+      setMessage(`Account ${accountNumber} deleted successfully.`)
+      const { data } = await api.get('/api/staff/accounts')
+      setRows(data.content)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not delete account')
+    }
+  }
+
   return (
     <>
       <h1>Account management</h1>
+      {error && <p className="error" role="alert">{error}</p>}
+      {message && <p className="ok">{message}</p>}
       <form className="card row" onSubmit={create}>
         <div><label>Customer number</label><input value={form.customerNumber} onChange={(e) => setForm({ ...form, customerNumber: e.target.value })} /></div>
         <div><label>Type</label><select value={form.accountType} onChange={(e) => setForm({ ...form, accountType: e.target.value })}><option>SAVINGS</option><option>CURRENT</option></select></div>
@@ -145,14 +263,17 @@ export function StaffAccountsPage() {
       </form>
       <div className="card" style={{ marginTop: '1rem' }}>
         <table className="table">
-          <thead><tr><th>Number</th><th>Customer</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Number</th><th>Customer</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
             {rows.map((a) => (
               <tr key={a.accountNumber}>
                 <td>{a.accountNumber}</td><td>{a.customerName}</td><td>{a.balance}</td><td>{a.status}</td>
                 <td>
-                  <button className="btn btn-ghost" onClick={() => changeStatus(a.accountNumber, 'BLOCKED')}>Block</button>
-                  <button className="btn btn-ghost" onClick={() => changeStatus(a.accountNumber, 'ACTIVE')}>Activate</button>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button className="btn btn-ghost" onClick={() => changeStatus(a.accountNumber, 'BLOCKED')}>Block</button>
+                    <button className="btn btn-ghost" onClick={() => changeStatus(a.accountNumber, 'ACTIVE')}>Activate</button>
+                    <button className="btn btn-ghost" style={{ color: '#dc2626' }} onClick={() => deleteAccount(a.accountNumber)}>Delete</button>
+                  </div>
                 </td>
               </tr>
             ))}

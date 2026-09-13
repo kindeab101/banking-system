@@ -6,6 +6,7 @@ import com.securebank.bms.entity.TransactionType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -60,4 +61,8 @@ public interface BankTransactionRepository extends JpaRepository<BankTransaction
     long countByCreatedAtGreaterThanEqual(Instant from);
 
     long countByStatusAndCreatedAtGreaterThanEqual(TransactionStatus status, Instant from);
+
+    @Modifying
+    @Query("DELETE FROM BankTransaction t WHERE t.sourceAccount.id = :accountId OR t.destinationAccount.id = :accountId")
+    void deleteByAccountId(@Param("accountId") Long accountId);
 }

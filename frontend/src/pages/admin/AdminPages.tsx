@@ -55,20 +55,64 @@ export function UsersPage() {
       setError(err?.response?.data?.message || 'Could not create user')
     }
   }
+
+  async function resetPassword(u: any) {
+    setError('')
+    setMessage('')
+    const newPassword = prompt(`Enter new password for ${u.username} (minimum 10 characters):`, 'DemoNewPass#2026x')
+    if (!newPassword) return
+    if (newPassword.length < 10) {
+      setError('Password must be at least 10 characters')
+      return
+    }
+    try {
+      await api.post(`/api/admin/users/${u.id}/reset-password`, { newPassword })
+      setMessage(`Password for ${u.username} successfully reset to: ${newPassword}`)
+      load()
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not reset password')
+    }
+  }
+
+  async function fireEmployee(u: any) {
+    setError('')
+    setMessage('')
+    if (!confirm(`Are you sure you want to fire employee ${u.fullName} (${u.username})? Their account and active sessions will be terminated immediately.`)) return
+    try {
+      await api.post(`/api/admin/users/${u.id}/fire`)
+      setMessage(`Employee ${u.username} has been fired and deactivated.`)
+      load()
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not fire employee')
+    }
+  }
+
   return (
     <>
       <h1>User management</h1>
+      {error && <p className="error" role="alert">{error}</p>}
+      {message && <p className="ok">{message}</p>}
       <div className="card">
         <table className="table">
-          <thead><tr><th>Username</th><th>Name</th><th>Status</th><th>Roles</th><th></th></tr></thead>
+          <thead><tr><th>Username</th><th>Name</th><th>Status</th><th>Roles</th><th>Actions</th></tr></thead>
           <tbody>
             {rows.map((u) => (
               <tr key={u.id}>
                 <td>{u.username}</td><td>{u.fullName}</td><td>{u.status}</td><td>{u.roles?.join(', ')}</td>
                 <td>
-                  <button className="btn btn-ghost" onClick={() => api.patch(`/api/admin/users/${u.id}/status`, { status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }).then(load)}>
-                    Toggle status
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <button className="btn btn-ghost" onClick={() => api.patch(`/api/admin/users/${u.id}/status`, { status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }).then(load)}>
+                      {u.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => resetPassword(u)}>
+                      Reset Password
+                    </button>
+                    {u.roles?.includes('BANK_EMPLOYEE') && u.status === 'ACTIVE' && (
+                      <button className="btn btn-ghost" style={{ color: '#dc2626' }} onClick={() => fireEmployee(u)}>
+                        Fire Employee
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

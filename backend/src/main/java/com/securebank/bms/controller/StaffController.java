@@ -6,6 +6,7 @@ import com.securebank.bms.entity.CustomerStatus;
 import com.securebank.bms.entity.TransactionStatus;
 import com.securebank.bms.entity.TransactionType;
 import com.securebank.bms.security.CurrentUserService;
+import com.securebank.bms.service.AuthService;
 import com.securebank.bms.service.BankingQueryService;
 import com.securebank.bms.service.ExportService;
 import com.securebank.bms.service.TransferService;
@@ -21,6 +22,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/staff")
@@ -31,15 +33,18 @@ public class StaffController {
     private final TransferService transferService;
     private final CurrentUserService currentUserService;
     private final ExportService exportService;
+    private final AuthService authService;
 
     public StaffController(BankingQueryService queryService,
                            TransferService transferService,
                            CurrentUserService currentUserService,
-                           ExportService exportService) {
+                           ExportService exportService,
+                           AuthService authService) {
         this.queryService = queryService;
         this.transferService = transferService;
         this.currentUserService = currentUserService;
         this.exportService = exportService;
+        this.authService = authService;
     }
 
     @GetMapping("/dashboard")
@@ -70,6 +75,12 @@ public class StaffController {
         return queryService.updateCustomer(currentUserService.requireUser(), id, request);
     }
 
+    @PostMapping("/customers/{id}/reset-password")
+    public Map<String, String> resetPassword(@PathVariable Long id, @Valid @RequestBody ResetPasswordRequest request) {
+        authService.staffResetCustomerPassword(currentUserService.requireUser(), id, request.newPassword());
+        return Map.of("message", "Customer password reset successfully");
+    }
+
     @GetMapping("/customers/{id}/accounts")
     public List<AccountResponse> customerAccounts(@PathVariable Long id) {
         return queryService.customerAccounts(id);
@@ -91,6 +102,12 @@ public class StaffController {
     @PatchMapping("/accounts/{accountNumber}/status")
     public AccountResponse status(@PathVariable String accountNumber, @Valid @RequestBody AccountStatusRequest request) {
         return queryService.changeAccountStatus(currentUserService.requireUser(), accountNumber, request.status());
+    }
+
+    @DeleteMapping("/accounts/{accountNumber}")
+    public Map<String, String> deleteAccount(@PathVariable String accountNumber) {
+        queryService.deleteAccount(currentUserService.requireUser(), accountNumber);
+        return Map.of("message", "Account deleted successfully");
     }
 
     @GetMapping("/transactions")

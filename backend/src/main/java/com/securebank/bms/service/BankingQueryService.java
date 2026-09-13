@@ -34,6 +34,7 @@ public class BankingQueryService {
     private final SystemSettingRepository settings;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
+    private final RefreshTokenRepository refreshTokens;
 
     public BankingQueryService(CustomerRepository customers,
                                AccountRepository accounts,
@@ -44,7 +45,8 @@ public class BankingQueryService {
                                AuditLogRepository auditLogs,
                                SystemSettingRepository settings,
                                PasswordEncoder passwordEncoder,
-                               AuditService auditService) {
+                               AuditService auditService,
+                               RefreshTokenRepository refreshTokens) {
         this.customers = customers;
         this.accounts = accounts;
         this.transactions = transactions;
@@ -55,6 +57,7 @@ public class BankingQueryService {
         this.settings = settings;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
+        this.refreshTokens = refreshTokens;
     }
 
     public Customer requireCustomer(UserAccount user) {
@@ -262,6 +265,7 @@ public class BankingQueryService {
             customer.setStatus(request.status());
             if (request.status() == CustomerStatus.INACTIVE) {
                 customer.getUser().setStatus(UserStatus.INACTIVE);
+                refreshTokens.deleteByUserId(customer.getUser().getId());
             } else {
                 customer.getUser().setStatus(UserStatus.ACTIVE);
             }
@@ -318,6 +322,19 @@ public class BankingQueryService {
         notifications.save(n);
         auditService.record(actor, "ACCOUNT_STATUS_CHANGE", "ACCOUNT", accountNumber, AuditResult.SUCCESS, status.name());
         return Mappers.toAccount(account);
+    }
+
+    @Transactional
+    public void deleteAccount(UserAccount actor, String accountNumber) {
+        Account account = accounts.findByAccountNumber(accountNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found"));
+        if (account.getBalance().compareTo(BigDecimal.ZERO) > 0) {
+            throw new com.securebank.bms.exception.InvalidTransactionException(
+                    "Cannot delete account with positive balance (" + account.getBalance() + " ETB). Balance must be zero before deletion.");
+        }
+        transactions.deleteByAccountId(account.getId());
+        accounts.delete(account);
+        auditService.record(actor, "ACCOUNT_DELETION", "ACCOUNT", accountNumber, AuditResult.SUCCESS, null);
     }
 
     public PageResponse<AccountResponse> searchAccounts(String q, AccountStatus status, int page, int size) {
@@ -398,7 +415,29 @@ public class BankingQueryService {
         UserAccount user = users.findById(id).orElseThrow(() -> new ResourceNotFoundException("User not found"));
         user.setStatus(status);
         users.save(user);
+        if (status != UserStatus.ACTIVE) {
+            refreshTokens.deleteByUserId(user.getId());
+        }
         auditService.record(actor, "USER_STATUS_CHANGE", "USER", user.getUsername(), AuditResult.SUCCESS, status.name());
+        return Mappers.toUser(user);
+    }
+
+    @Transactional
+    public UserResponse fireEmployee(UserAccount actor, Long employeeUserId) {
+        if (actor.getId().equals(employeeUserId)) {
+            throw new UnauthorizedOperationException("You cannot fire your own account");
+        }
+        UserAccount user = users.findById(employeeUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        boolean isEmployee = user.getRoles().stream()
+                .anyMatch(r -> r.getCode().equals(RoleCode.BANK_EMPLOYEE.name()));
+        if (!isEmployee) {
+            throw new UnauthorizedOperationException("Target user is not a bank employee");
+        }
+        user.setStatus(UserStatus.INACTIVE);
+        users.save(user);
+        refreshTokens.deleteByUserId(user.getId());
+        auditService.record(actor, "EMPLOYEE_FIRED", "USER", user.getUsername(), AuditResult.SUCCESS, null);
         return Mappers.toUser(user);
     }
 

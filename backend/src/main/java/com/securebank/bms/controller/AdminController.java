@@ -4,6 +4,7 @@ import com.securebank.bms.dto.*;
 import com.securebank.bms.entity.Role;
 import com.securebank.bms.entity.UserStatus;
 import com.securebank.bms.security.CurrentUserService;
+import com.securebank.bms.service.AuthService;
 import com.securebank.bms.service.BankingQueryService;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,10 +20,12 @@ public class AdminController {
 
     private final BankingQueryService queryService;
     private final CurrentUserService currentUserService;
+    private final AuthService authService;
 
-    public AdminController(BankingQueryService queryService, CurrentUserService currentUserService) {
+    public AdminController(BankingQueryService queryService, CurrentUserService currentUserService, AuthService authService) {
         this.queryService = queryService;
         this.currentUserService = currentUserService;
+        this.authService = authService;
     }
 
     @GetMapping("/dashboard")
@@ -44,6 +47,23 @@ public class AdminController {
     @PatchMapping("/users/{id}/status")
     public UserResponse status(@PathVariable Long id, @RequestBody UserResponse.StatusUpdate request) {
         return queryService.updateUserStatus(currentUserService.requireUser(), id, request.status() == null ? UserStatus.INACTIVE : request.status());
+    }
+
+    @PostMapping("/users/{id}/reset-password")
+    public Map<String, String> resetPassword(@PathVariable Long id, @Valid @RequestBody ResetPasswordRequest request) {
+        authService.adminResetPassword(currentUserService.requireUser(), id, request.newPassword());
+        return Map.of("message", "Password reset successfully");
+    }
+
+    @PostMapping("/users/{id}/fire")
+    public UserResponse fireEmployee(@PathVariable Long id) {
+        return queryService.fireEmployee(currentUserService.requireUser(), id);
+    }
+
+    @DeleteMapping("/accounts/{accountNumber}")
+    public Map<String, String> deleteAccount(@PathVariable String accountNumber) {
+        queryService.deleteAccount(currentUserService.requireUser(), accountNumber);
+        return Map.of("message", "Account deleted successfully");
     }
 
     @PatchMapping("/users/{id}/role")

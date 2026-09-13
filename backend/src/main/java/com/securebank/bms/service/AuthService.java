@@ -5,6 +5,7 @@ import com.securebank.bms.config.AppProperties;
 import com.securebank.bms.dto.AuthResponse;
 import com.securebank.bms.dto.ChangePasswordRequest;
 import com.securebank.bms.entity.AuditResult;
+import com.securebank.bms.entity.Customer;
 import com.securebank.bms.entity.RefreshToken;
 import com.securebank.bms.entity.Role;
 import com.securebank.bms.entity.UserAccount;
@@ -12,6 +13,7 @@ import com.securebank.bms.entity.UserStatus;
 import com.securebank.bms.exception.ApiException;
 import com.securebank.bms.exception.ResourceNotFoundException;
 import com.securebank.bms.mapper.Mappers;
+import com.securebank.bms.repository.CustomerRepository;
 import com.securebank.bms.repository.RefreshTokenRepository;
 import com.securebank.bms.repository.UserAccountRepository;
 import com.securebank.bms.security.JwtService;
@@ -31,6 +33,7 @@ public class AuthService {
     private static final String GENERIC_LOGIN_ERROR = "Invalid credentials";
 
     private final UserAccountRepository users;
+    private final CustomerRepository customers;
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -38,12 +41,14 @@ public class AuthService {
     private final AuditService auditService;
 
     public AuthService(UserAccountRepository users,
+                       CustomerRepository customers,
                        RefreshTokenRepository refreshTokens,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        AppProperties properties,
                        AuditService auditService) {
         this.users = users;
+        this.customers = customers;
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -148,6 +153,37 @@ public class AuthService {
         users.save(user);
         refreshTokens.deleteByUserId(user.getId());
         auditService.record(user, "PASSWORD_CHANGE", "USER", user.getUsername(), AuditResult.SUCCESS, null);
+    }
+
+    @Transactional
+    public void adminResetPassword(UserAccount actor, Long userId, String newPassword) {
+        UserAccount target = users.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        target.setPasswordHash(passwordEncoder.encode(newPassword));
+        target.setFailedLoginCount(0);
+        target.setLockedUntil(null);
+        if (target.getStatus() == UserStatus.LOCKED) {
+            target.setStatus(UserStatus.ACTIVE);
+        }
+        users.save(target);
+        refreshTokens.deleteByUserId(target.getId());
+        auditService.record(actor, "CREDENTIAL_RESET", "USER", target.getUsername(), AuditResult.SUCCESS, "admin reset");
+    }
+
+    @Transactional
+    public void staffResetCustomerPassword(UserAccount actor, Long customerId, String newPassword) {
+        Customer customer = customers.findById(customerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
+        UserAccount target = customer.getUser();
+        target.setPasswordHash(passwordEncoder.encode(newPassword));
+        target.setFailedLoginCount(0);
+        target.setLockedUntil(null);
+        if (target.getStatus() == UserStatus.LOCKED) {
+            target.setStatus(UserStatus.ACTIVE);
+        }
+        users.save(target);
+        refreshTokens.deleteByUserId(target.getId());
+        auditService.record(actor, "CREDENTIAL_RESET", "CUSTOMER", customer.getCustomerNumber(), AuditResult.SUCCESS, "staff reset");
     }
 
     public UserAccount require(Long id) {
